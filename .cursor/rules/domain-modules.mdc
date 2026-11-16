@@ -1,0 +1,20 @@
+---
+description: Put API domain code in src/modules and leave shared infrastructure outside
+alwaysApply: true
+---
+
+# Domain modules
+
+Product features live under `src/modules/<domain>/`. Each module owns its controller, service, entities, DTOs, and specs.
+
+```
+src/modules/engagements/engagements.module.ts
+src/modules/engagements/engagements.controller.ts
+src/modules/engagements/engagements.service.ts
+```
+
+Current domains: `auth`, `users`, `engagements`, `properties`, `amenities`, `regions`, `notes`.
+
+Shared infrastructure stays at the `src/` root: `common`, `config`, `database`, `utils`, `health`, `messaging`, `integrations`.
+
+Do not add `src/controllers/` or `src/services/`. Do not split the API into seeker, partner, creators, or platform-operator folders. Actor-specific behavior stays inside the domain module.

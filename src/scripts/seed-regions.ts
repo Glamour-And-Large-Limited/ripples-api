@@ -1,6 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from '../app.module.js';
-import { RegionsSeedService } from '../regions/regions-seed.service.js';
+import { RegionsSeedService } from '../modules/regions/regions-seed.service.js';
 
 async function main() {
   const app = await NestFactory.createApplicationContext(AppModule, {

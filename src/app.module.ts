@@ -1,15 +1,16 @@
 import { Module } from '@nestjs/common';
-import { AmenitiesModule } from './amenities/amenities.module.js';
-import { AuthModule } from './auth/auth.module.js';
+import { AmenitiesModule } from './modules/amenities/amenities.module.js';
+import { AuthModule } from './modules/auth/auth.module.js';
 import { AppConfigModule } from './config/config.module.js';
 import { DatabaseModule } from './database/database.module.js';
-import { EngagementsModule } from './engagements/engagements.module.js';
+import { EngagementsModule } from './modules/engagements/engagements.module.js';
 import { HealthModule } from './health/health.module.js';
 import { IntegrationsModule } from './integrations/integrations.module.js';
 import { MessagingModule } from './messaging/messaging.module.js';
-import { NotesModule } from './notes/notes.module.js';
-import { RegionsModule } from './regions/regions.module.js';
-import { UsersModule } from './users/users.module.js';
+import { NotesModule } from './modules/notes/notes.module.js';
+import { PropertiesModule } from './modules/properties/properties.module.js';
+import { RegionsModule } from './modules/regions/regions.module.js';
+import { UsersModule } from './modules/users/users.module.js';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { UsersModule } from './users/users.module.js';
     EngagementsModule,
     RegionsModule,
     AmenitiesModule,
+    PropertiesModule,
   ],
 })
 export class AppModule {}

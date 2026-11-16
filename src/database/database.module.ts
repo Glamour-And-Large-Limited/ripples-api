@@ -13,9 +13,11 @@ import { TypeOrmModule } from '@nestjs/typeorm';
         username: config.getOrThrow<string>('POSTGRES_USER'),
         password: config.getOrThrow<string>('POSTGRES_PASSWORD'),
         database: config.getOrThrow<string>('POSTGRES_DB'),
-        ssl: config.getOrThrow<boolean>('POSTGRES_SSL'),
+        ssl: config.getOrThrow<boolean>('POSTGRES_SSL')
+          ? { rejectUnauthorized: false }
+          : false,
         autoLoadEntities: true,
-        synchronize: true,
+        synchronize: config.get<boolean>('TYPEORM_SYNC') === true,
       }),
     }),
   ],

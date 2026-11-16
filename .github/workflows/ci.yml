@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_call:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Lint, typecheck, test
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ripples
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      PORT: 8000
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ripples
+      POSTGRES_SSL: "false"
+      CORS_ORIGIN: http://localhost:3000
+      HTTP_TRUST_PROXY: "false"
+      SWAGGER_ENABLED: "false"
+      SERVICE_NAME: ripples-api
+      SERVICE_SHARED_SECRET: ci-shared-secret-at-least-32-chars
+      PEERS: ""
+      MESSAGING_ENABLED: "false"
+      MESSAGING_TRANSPORT: tcp
+      MESSAGING_HOST: 127.0.0.1
+      MESSAGING_PORT: 8001
+      JWT_SECRET: ci-jwt-secret-at-least-32-characters-long
+      JWT_EXPIRES_IN: 1h
+      OTP_TTL_SECONDS: 300
+      OTP_DEBUG: "true"
+      OTP_RATE_LIMIT_MAX: 5
+      OTP_RATE_LIMIT_WINDOW_SECONDS: 900
+      REGIONS_SEED_ON_BOOT: "false"
+      TYPEORM_SYNC: "true"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: E2E tests
+        run: pnpm test:e2e

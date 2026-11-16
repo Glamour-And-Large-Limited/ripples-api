@@ -1,0 +1,127 @@
+name: Deploy preprod
+
+on:
+  push:
+    branches:
+      - preprod
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy-preprod
+  cancel-in-progress: false
+
+jobs:
+  test:
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    name: Build and deploy preprod
+    needs: test
+    runs-on: ubuntu-latest
+    environment: preprod
+
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || 'eu-west-1' }}
+      ECR_REPOSITORY: ripples-api
+      ECS_CLUSTER: ripples-preprod-cluster
+      ECS_SERVICE: ripples-preprod-api
+      ECS_TASK_FAMILY: ripples-preprod-api
+      CONTAINER_NAME: ripples-api
+      PROMOTE_BUCKET: ripples-prod-promote
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push image
+        id: build
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+          IMAGE_TAG: preprod-${{ github.sha }}
+        run: |
+          IMAGE_URI="$REGISTRY/$ECR_REPOSITORY"
+          docker build -t "$IMAGE_URI:$IMAGE_TAG" -t "$IMAGE_URI:preprod" .
+          docker push "$IMAGE_URI:$IMAGE_TAG"
+          docker push "$IMAGE_URI:preprod"
+          DIGEST=$(aws ecr describe-images \
+            --repository-name "$ECR_REPOSITORY" \
+            --image-ids imageTag="$IMAGE_TAG" \
+            --query 'imageDetails[0].imageDigest' \
+            --output text)
+          echo "image_uri=$IMAGE_URI@$DIGEST" >> "$GITHUB_OUTPUT"
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+
+      - name: Render and deploy task definition
+        env:
+          IMAGE_URI: ${{ steps.build.outputs.image_uri }}
+        run: |
+          TASK_DEF=$(aws ecs describe-task-definition \
+            --task-definition "$ECS_TASK_FAMILY" \
+            --query 'taskDefinition')
+
+          NEW_TASK_DEF=$(echo "$TASK_DEF" | jq \
+            --arg IMAGE "$IMAGE_URI" \
+            --arg NAME "$CONTAINER_NAME" '
+              .containerDefinitions |= map(
+                if .name == $NAME then .image = $IMAGE else . end
+              )
+              | del(
+                .taskDefinitionArn,
+                .revision,
+                .status,
+                .requiresAttributes,
+                .compatibilities,
+                .registeredAt,
+                .registeredBy
+              )
+            ')
+
+          NEW_ARN=$(aws ecs register-task-definition \
+            --cli-input-json "$NEW_TASK_DEF" \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)
+
+          aws ecs update-service \
+            --cluster "$ECS_CLUSTER" \
+            --service "$ECS_SERVICE" \
+            --task-definition "$NEW_ARN" \
+            --force-new-deployment
+
+          aws ecs wait services-stable \
+            --cluster "$ECS_CLUSTER" \
+            --services "$ECS_SERVICE"
+
+      - name: Publish promote artifact for prod pipeline
+        continue-on-error: true
+        env:
+          IMAGE_URI: ${{ steps.build.outputs.image_uri }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          aws ssm put-parameter \
+            --name /ripples/preprod/image_digest \
+            --type String \
+            --value "$DIGEST" \
+            --overwrite
+
+          mkdir -p /tmp/promote
+          jq -n \
+            --arg name "$CONTAINER_NAME" \
+            --arg image "$IMAGE_URI" \
+            '[{name: $name, imageUri: $image}]' > /tmp/promote/imagedefinitions.json
+
+          # CodePipeline S3 source requires a zip
+          (cd /tmp/promote && zip -j /tmp/imagedefinitions.zip imagedefinitions.json)
+          aws s3 cp /tmp/imagedefinitions.zip \
+            "s3://$PROMOTE_BUCKET/promote/imagedefinitions.json"

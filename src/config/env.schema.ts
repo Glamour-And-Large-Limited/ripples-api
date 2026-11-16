@@ -56,6 +56,9 @@ export const envSchema = z.object({
     .default(
       'https://raw.githubusercontent.com/dr5hn/countries-states-cities-database/master/json/countries+states+cities.json',
     ),
+  TYPEORM_SYNC: booleanFlag,
+  AWS_REGION: z.string().min(1).optional(),
+  S3_MEDIA_BUCKET: z.string().min(1).optional(),
 });
 
 export type AppEnv = z.infer<typeof envSchema>;

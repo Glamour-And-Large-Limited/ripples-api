@@ -38,6 +38,9 @@ describe('validateEnv', () => {
     expect(env.OTP_RATE_LIMIT_WINDOW_SECONDS).toBe(900);
     expect(env.REGIONS_SEED_ON_BOOT).toBe(false);
     expect(env.REGIONS_DATA_URL).toContain('countries+states+cities.json');
+    expect(env.TYPEORM_SYNC).toBe(false);
+    expect(env.AWS_REGION).toBeUndefined();
+    expect(env.S3_MEDIA_BUCKET).toBeUndefined();
   });
 
   it('parses named peer URLs', () => {

@@ -1,0 +1,7 @@
+aws_region              = "eu-west-1"
+ecr_repository_url      = "123456789012.dkr.ecr.eu-west-1.amazonaws.com/ripples-api"
+ecr_repository_arn      = "arn:aws:ecr:eu-west-1:123456789012:repository/ripples-api"
+codepipeline_role_arn   = "arn:aws:iam::123456789012:role/ripples-codepipeline-prod"
+cors_origin             = "https://app.example.com"
+# acm_certificate_arn  = "arn:aws:acm:eu-west-1:123456789012:certificate/..."
+# approval_sns_topic_arn = "arn:aws:sns:eu-west-1:123456789012:ripples-prod-approvals"

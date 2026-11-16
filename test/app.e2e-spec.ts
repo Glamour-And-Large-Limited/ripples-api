@@ -7,7 +7,7 @@ import request from 'supertest';
 import { App } from 'supertest/types.js';
 import { configureApp } from '../src/configure-app.js';
 import { signRequest } from '../src/integrations/handshake.js';
-import { NOTE_SEEDS } from '../src/notes/notes.seed.js';
+import { NOTE_SEEDS } from '../src/modules/notes/notes.seed.js';
 
 const secret = 'test-secret';
 const jwtSecret = '12345678901234567890123456789012';
@@ -60,7 +60,7 @@ describe('Ripples API (e2e)', () => {
     await app.init();
 
     const { RegionsSeedService } =
-      await import('../src/regions/regions-seed.service.js');
+      await import('../src/modules/regions/regions-seed.service.js');
     await app.get(RegionsSeedService).persistDataset([
       {
         id: 1,
