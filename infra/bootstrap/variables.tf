@@ -7,7 +7,13 @@ variable "aws_region" {
 variable "github_org" {
   type        = string
   description = "GitHub organization or user that owns the repo"
-  default     = "glamourandlarge-arch"
+  default     = "Glamour-And-Large-Limited"
+}
+
+variable "github_org_id" {
+  type        = string
+  description = "GitHub organization ID included in the Actions OIDC subject"
+  default     = "355468796"
 }
 
 variable "github_repo" {

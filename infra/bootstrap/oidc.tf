@@ -9,7 +9,7 @@ resource "aws_iam_openid_connect_provider" "github" {
 }
 
 locals {
-  github_sub_prefix = "repo:${var.github_org}/${var.github_repo}"
+  github_sub_prefix = "repo:${var.github_org}@${var.github_org_id}/${var.github_repo}"
   account_id        = data.aws_caller_identity.current.account_id
 }
 
@@ -35,9 +35,9 @@ data "aws_iam_policy_document" "gha_assume" {
       test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
       values = [
-        "${local.github_sub_prefix}:ref:refs/heads/${each.key == "staging" ? "main" : "preprod"}",
-        "${local.github_sub_prefix}:environment:${each.key}",
-        "${local.github_sub_prefix}:pull_request",
+        "${local.github_sub_prefix}@*:ref:refs/heads/${each.key == "staging" ? "main" : "preprod"}",
+        "${local.github_sub_prefix}@*:environment:${each.key}",
+        "${local.github_sub_prefix}@*:pull_request",
       ]
     }
   }
