@@ -3,6 +3,7 @@ import {
   ConflictException,
   Inject,
   Injectable,
+  ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -33,6 +34,7 @@ import type { SendOtpDto } from './send-otp.dto.js';
 import { SMS_SENDER, type SmsSender } from './sms-sender.js';
 import type { VerifyContactOtpDto } from './verify-contact-otp.dto.js';
 import type { VerifyOtpDto } from './verify-otp.dto.js';
+import { verifyGoogleIdToken } from './google-id-token.js';
 
 const BCRYPT_ROUNDS = 12;
 const OTP_MAX_ATTEMPTS = 5;
@@ -68,6 +70,22 @@ export class AuthService {
       name: input.name,
       passwordHash,
     });
+    return {
+      accessToken: await this.sign(user),
+      user,
+    };
+  }
+
+  async loginWithGoogle(idToken: string): Promise<AuthResponse> {
+    const clientId = this.config.get<string>('GOOGLE_CLIENT_ID')?.trim() ?? '';
+    if (!clientId) {
+      throw new ServiceUnavailableException(
+        'Google sign-in is not configured',
+      );
+    }
+
+    const identity = await verifyGoogleIdToken(idToken, clientId);
+    const user = await this.users.findOrCreateByGoogle(identity);
     return {
       accessToken: await this.sign(user),
       user,

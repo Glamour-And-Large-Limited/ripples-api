@@ -15,6 +15,7 @@ import type { UserResponse } from '../users/users.service.js';
 import { Public } from '../../utils/decorators/public.decorator.js';
 import { AuthService } from './auth.service.js';
 import { CurrentUser } from './current-user.decorator.js';
+import { GoogleLoginDto } from './google-login.dto.js';
 import { LoginDto } from './login.dto.js';
 import { RegisterDto } from './register.dto.js';
 import { ChangePasswordDto } from './change-password.dto.js';
@@ -33,6 +34,14 @@ export class AuthController {
   async register(@Body() input: RegisterDto) {
     const data = await this.auth.register(input);
     return { message: 'Account created successfully', data };
+  }
+
+  @Public()
+  @Post('google')
+  @HttpCode(HttpStatus.OK)
+  async loginWithGoogle(@Body() input: GoogleLoginDto) {
+    const data = await this.auth.loginWithGoogle(input.idToken);
+    return { message: 'Login successful', data };
   }
 
   @Public()

@@ -48,5 +48,6 @@ resource "aws_secretsmanager_secret_version" "app" {
     TYPEORM_SYNC                  = var.typeorm_sync ? "true" : "false"
     AWS_REGION                    = var.aws_region
     S3_MEDIA_BUCKET               = var.s3_media_bucket
+    SES_FROM_EMAIL                = var.ses_from_email
   })
 }

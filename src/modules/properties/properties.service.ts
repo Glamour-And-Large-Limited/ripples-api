@@ -1,4 +1,7 @@
+import { randomBytes } from 'node:crypto';
 import {
+  ConflictException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
@@ -7,8 +10,11 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { isUniqueViolation } from '../../utils/is-unique-violation.js';
+import { MediaService } from '../media/media.service.js';
+import { ownedImageKeys } from '../media/media-key.js';
+import { CreateListingDto } from './create-listing.dto.js';
 import { PROPERTY_SEEDS, type PropertySeed } from './properties.seed.js';
-import { Property } from './property.entity.js';
+import { Property, type PropertyKind } from './property.entity.js';
 import { SavedProperty } from './saved-property.entity.js';
 
 export type PropertyResponse = {
@@ -33,6 +39,7 @@ export type PropertyResponse = {
   furnishing: string;
   yearBuilt?: number;
   images: string[];
+  imageKeys?: string[];
   verification: Property['verification'];
   partnerVerified: boolean;
   availability: Property['availability'];
@@ -54,6 +61,7 @@ export class PropertiesService implements OnModuleInit {
     private readonly properties: Repository<Property>,
     @InjectRepository(SavedProperty)
     private readonly savedProperties: Repository<SavedProperty>,
+    private readonly media: MediaService,
   ) {}
 
   async onModuleInit() {
@@ -72,13 +80,13 @@ export class PropertiesService implements OnModuleInit {
     const rows = await this.properties.find({
       order: { sortOrder: 'ASC', slug: 'ASC' },
     });
-    return rows.map((row) => toPropertyResponse(row));
+    return Promise.all(rows.map((row) => this.present(row)));
   }
 
   async findBySlug(slug: string): Promise<PropertyResponse> {
     const row = await this.properties.findOne({ where: { slug } });
     if (!row) throw new NotFoundException('Property not found');
-    return toPropertyResponse(row);
+    return this.present(row);
   }
 
   async listSaved(userId: string): Promise<PropertyResponse[]> {
@@ -92,10 +100,13 @@ export class PropertiesService implements OnModuleInit {
       id: In(saved.map((item) => item.propertyId)),
     });
     const byId = new Map(rows.map((row) => [row.id, row]));
-    return saved.flatMap((item) => {
-      const property = byId.get(item.propertyId);
-      return property ? [toPropertyResponse(property)] : [];
-    });
+    const responses = await Promise.all(
+      saved.map(async (item) => {
+        const property = byId.get(item.propertyId);
+        return property ? this.present(property) : null;
+      }),
+    );
+    return responses.filter((item): item is PropertyResponse => item !== null);
   }
 
   async save(userId: string, propertyId: string): Promise<PropertyResponse> {
@@ -112,12 +123,85 @@ export class PropertiesService implements OnModuleInit {
         if (!isUniqueViolation(error)) throw error;
       }
     }
-    return toPropertyResponse(property);
+    return this.present(property);
   }
 
   async unsave(userId: string, propertyId: string): Promise<void> {
     await this.requireProperty(propertyId);
     await this.savedProperties.delete({ userId, propertyId });
+  }
+
+  async createListing(
+    userId: string,
+    input: CreateListingDto,
+  ): Promise<PropertyResponse> {
+    const slug = await this.allocateSlug(input.title);
+    const saved = await this.properties.save(
+      this.properties.create({
+        ...listingColumns(input),
+        slug,
+        ownerUserId: userId,
+        furnishing: 'Not specified',
+        images: ownedImageKeys(userId, input.images ?? []),
+        verification: 'pending',
+        partnerVerified: false,
+        postedAgo: 'Just now',
+        documentVerification: input.ownershipDocument?.trim()
+          ? 'pending'
+          : null,
+        sortOrder: 0,
+      }),
+    );
+    return this.present(saved);
+  }
+
+  async updateListing(
+    userId: string,
+    slug: string,
+    input: CreateListingDto,
+  ): Promise<PropertyResponse> {
+    const row = await this.properties.findOne({ where: { slug } });
+    if (!row) throw new NotFoundException('Property not found');
+    if (!row.ownerUserId || row.ownerUserId !== userId) {
+      throw new ForbiddenException('You cannot update this listing');
+    }
+
+    const columns = listingColumns(input);
+    if (input.images !== undefined) {
+      columns.images = ownedImageKeys(userId, input.images);
+    }
+    const saved = await this.properties.save(
+      this.properties.merge(row, columns),
+    );
+    return this.present(saved);
+  }
+
+  private async present(row: Property): Promise<PropertyResponse> {
+    const response = toPropertyResponse(row);
+    const imageKeys = row.images.filter((image) =>
+      image.startsWith('media/listings/'),
+    );
+    return {
+      ...response,
+      images: await Promise.all(
+        row.images.map((image) => this.media.readableUrl(image)),
+      ),
+      ...(imageKeys.length > 0 ? { imageKeys } : {}),
+    };
+  }
+
+  private async allocateSlug(title: string): Promise<string> {
+    const base = listingSlugBase(title);
+    const suffix = randomBytes(3).toString('hex');
+    let slug = `${base}-${suffix}`;
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const existing = await this.properties.findOne({ where: { slug } });
+      if (!existing) return slug;
+      slug = `${slug}-${randomBytes(2).toString('hex')}`;
+    }
+
+    throw new ConflictException('Could not allocate a listing slug');
   }
 
   private async requireProperty(propertyId: string): Promise<Property> {
@@ -166,6 +250,60 @@ export function toPropertyResponse(property: Property): PropertyResponse {
     description: property.description,
     negotiable: property.negotiable,
     ...optional('recommendedReason', property.recommendedReason),
+  };
+}
+
+const propertyKinds = {
+  House: 'house',
+  Apartment: 'apartment',
+  Land: 'land',
+  Commercial: 'commercial',
+} as const satisfies Record<CreateListingDto['propertyType'], PropertyKind>;
+
+export function listingSlugBase(title: string): string {
+  const base = title
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 48);
+  return base || 'listing';
+}
+
+function publicDocumentName(value: string | null): string | null {
+  if (!value) return null;
+  if (!value.startsWith('media/')) return value;
+  return value.split('/').pop() || value;
+}
+
+function listingColumns(input: CreateListingDto): Partial<Property> {
+  const ownershipDocument = input.ownershipDocument?.trim() || null;
+  return {
+    title: input.title.trim(),
+    location: [input.estateName, input.cityArea, input.state]
+      .map((part) => part?.trim())
+      .filter((part): part is string => Boolean(part))
+      .join(', '),
+    area: input.cityArea.trim(),
+    purpose: input.purpose,
+    kind: propertyKinds[input.propertyType],
+    subtype: input.propertySubtype.trim(),
+    price: input.askingPrice,
+    bedrooms: input.bedrooms ?? null,
+    bathrooms: input.bathrooms ?? null,
+    floorArea: input.floorArea,
+    condition: input.condition.trim(),
+    description: input.description.trim(),
+    negotiable: input.negotiable,
+    availability:
+      input.currentAvailability.trim().toLowerCase() === 'available now'
+        ? 'available'
+        : 'unavailable',
+    titleDocument: publicDocumentName(ownershipDocument),
+    listingKind: input.listingKind,
+    partnerType: input.partnerType,
+    submission: input.submission,
   };
 }
 

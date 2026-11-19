@@ -10,6 +10,10 @@ import {
 } from 'typeorm';
 
 export type ListingPurpose = 'rent' | 'sale';
+export type ListingKind = 'individual' | 'unit' | 'development';
+export type PartnerType =
+  'owner' | 'agent' | 'agency' | 'developer' | 'manager';
+export type ListingSubmission = Record<string, Record<string, string>>;
 export type PropertyKind = 'house' | 'apartment' | 'land' | 'commercial';
 export type AvailabilityStatus =
   'available' | 'unavailable' | 'under-offer' | 'reserved' | 'sold' | 'rented';
@@ -108,6 +112,18 @@ export class Property {
 
   @Column({ name: 'recommended_reason', type: 'text', nullable: true })
   recommendedReason: string | null;
+
+  @Column({ name: 'owner_user_id', type: 'uuid', nullable: true })
+  ownerUserId: string | null;
+
+  @Column({ name: 'listing_kind', type: 'text', nullable: true })
+  listingKind: ListingKind | null;
+
+  @Column({ name: 'partner_type', type: 'text', nullable: true })
+  partnerType: PartnerType | null;
+
+  @Column({ type: 'jsonb', nullable: true })
+  submission: ListingSubmission | null;
 
   @Column({ name: 'sort_order', type: 'int', default: 0 })
   sortOrder: number;

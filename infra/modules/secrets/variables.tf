@@ -53,6 +53,12 @@ variable "aws_region" {
   type = string
 }
 
+variable "ses_from_email" {
+  type        = string
+  description = "Verified SES identity used as the From address. Empty keeps email on the console sender."
+  default     = ""
+}
+
 variable "tags" {
   type    = map(string)
   default = {}

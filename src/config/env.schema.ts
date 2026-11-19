@@ -59,6 +59,8 @@ export const envSchema = z.object({
   TYPEORM_SYNC: booleanFlag,
   AWS_REGION: z.string().min(1).optional(),
   S3_MEDIA_BUCKET: z.string().min(1).optional(),
+  GOOGLE_CLIENT_ID: z.string().trim().default(''),
+  SES_FROM_EMAIL: z.string().trim().default(''),
 });
 
 export type AppEnv = z.infer<typeof envSchema>;

@@ -1,5 +1,10 @@
-import { NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  NotFoundException,
+  UnprocessableEntityException,
+} from '@nestjs/common';
 import { QueryFailedError } from 'typeorm';
+import type { CreateListingDto } from './create-listing.dto.js';
 import { PROPERTY_SEEDS } from './properties.seed.js';
 import { PropertiesService, toPropertyResponse } from './properties.service.js';
 import { Property } from './property.entity.js';
@@ -39,6 +44,10 @@ function property(overrides: Partial<Property> = {}): Property {
     description: firstSeed.description,
     negotiable: firstSeed.negotiable,
     recommendedReason: firstSeed.recommendedReason ?? null,
+    ownerUserId: null,
+    listingKind: null,
+    partnerType: null,
+    submission: null,
     sortOrder: firstSeed.sortOrder,
     createdAt: new Date('2026-01-01T00:00:00.000Z'),
     updatedAt: new Date('2026-01-01T00:00:00.000Z'),
@@ -69,6 +78,17 @@ describe('toPropertyResponse', () => {
     expect(response).not.toHaveProperty('paymentFrequency');
     expect(response).not.toHaveProperty('confirmedAgo');
     expect(response).not.toHaveProperty('recommendedReason');
+  });
+
+  it('omits the wizard submission from the public response', () => {
+    const response = toPropertyResponse(
+      property({
+        submission: { verifyDetails: { email: 'ada@example.com' } },
+      }),
+    );
+
+    expect(response).not.toHaveProperty('submission');
+    expect(response).not.toHaveProperty('ownerUserId');
   });
 });
 
@@ -146,6 +166,193 @@ describe('PropertiesService save', () => {
   });
 });
 
+describe('PropertiesService listings', () => {
+  it('maps a wizard submission onto the public listing', async () => {
+    const saved: Array<Partial<Property>> = [];
+    const service = createService({
+      properties: {
+        findOne: async () => null,
+        save: async (row: Partial<Property>) => {
+          saved.push(row);
+          return property({
+            ...row,
+            id: 'created-1',
+            slug: row.slug ?? 'lekki-terrace-abc123',
+          });
+        },
+      },
+    });
+
+    const created = await service.createListing('user-1', listingInput());
+
+    expect(created.kind).toBe('house');
+    expect(created.purpose).toBe('sale');
+    expect(created.title).toBe('Lekki Terrace');
+    expect(created.location).toBe('Palm Estate, Lekki, Lagos');
+    expect(created.area).toBe('Lekki');
+    expect(created.price).toBe(25_000_000);
+    expect(created.negotiable).toBe(true);
+    expect(created.availability).toBe('available');
+    expect(created.verification).toBe('pending');
+    expect(created.partnerVerified).toBe(false);
+    expect(created.furnishing).toBe('Not specified');
+    expect(created.images).toEqual([]);
+    expect(created.postedAgo).toBe('Just now');
+    expect(created.titleDocument).toBe('deed.pdf');
+    expect(created).not.toHaveProperty('submission');
+    expect(saved[0]).toMatchObject({
+      ownerUserId: 'user-1',
+      listingKind: 'development',
+      partnerType: 'developer',
+      submission: listingInput().submission,
+    });
+    expect(saved[0]?.slug).toMatch(/^lekki-terrace-[a-f0-9]+$/);
+  });
+
+  it('adds another suffix when the first slug is already taken', async () => {
+    const lookups: string[] = [];
+    let savedSlug = '';
+    const service = createService({
+      properties: {
+        findOne: async ({ where }: { where: { slug: string } }) => {
+          lookups.push(where.slug);
+          return lookups.length === 1 ? property({ slug: where.slug }) : null;
+        },
+        save: async (row: Partial<Property>) => {
+          savedSlug = row.slug ?? '';
+          return property({ ...row, id: 'created-2', slug: savedSlug });
+        },
+      },
+    });
+
+    await service.createListing('user-1', listingInput());
+
+    expect(lookups).toHaveLength(2);
+    expect(savedSlug.startsWith(`${lookups[0]}-`)).toBe(true);
+  });
+
+  it('stores uploaded photo keys and signs them on read', async () => {
+    const key =
+      'media/listings/user-1/listing-photo/11111111-1111-4111-8111-111111111111.jpg';
+    const saved: Array<Partial<Property>> = [];
+    const service = createService({
+      properties: {
+        findOne: async () => null,
+        save: async (row: Partial<Property>) => {
+          saved.push(row);
+          return property({
+            ...row,
+            id: 'created-1',
+            slug: row.slug ?? 'lekki-terrace-abc123',
+          });
+        },
+      },
+    });
+
+    const created = await service.createListing('user-1', {
+      ...listingInput(),
+      images: [key],
+    });
+
+    expect(saved[0]?.images).toEqual([key]);
+    expect(created.imageKeys).toEqual([key]);
+    expect(created.images).toEqual([key]);
+  });
+
+  it('rejects a photo key owned by someone else', async () => {
+    const service = createService({
+      properties: {
+        findOne: async () => null,
+      },
+    });
+
+    await expect(
+      service.createListing('user-1', {
+        ...listingInput(),
+        images: [
+          'media/listings/other-user/listing-photo/11111111-1111-4111-8111-111111111111.jpg',
+        ],
+      }),
+    ).rejects.toBeInstanceOf(UnprocessableEntityException);
+  });
+
+  it('keeps existing photos when an update does not send images', async () => {
+    const existing = property({
+      ownerUserId: 'user-1',
+      images: [
+        'media/listings/user-1/listing-photo/11111111-1111-4111-8111-111111111111.jpg',
+      ],
+    });
+    const service = createService({
+      properties: {
+        findOne: async () => existing,
+        save: async (row: Property) => row,
+      },
+    });
+
+    const updated = await service.updateListing(
+      'user-1',
+      'property-1',
+      listingInput(),
+    );
+
+    expect(updated.imageKeys).toEqual(existing.images);
+  });
+
+  it('rejects an update from someone who does not own the listing', async () => {
+    const service = createService({
+      properties: {
+        findOne: async () => property({ ownerUserId: 'owner-1' }),
+      },
+    });
+
+    await expect(
+      service.updateListing('other-user', 'property-1', listingInput()),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('keeps seeded listings read-only', async () => {
+    const service = createService({
+      properties: {
+        findOne: async () => property({ ownerUserId: null }),
+      },
+    });
+
+    await expect(
+      service.updateListing('user-1', 'property-1', listingInput()),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+});
+
+function listingInput(): CreateListingDto {
+  return {
+    partnerType: 'developer',
+    listingKind: 'development',
+    purpose: 'sale',
+    propertyType: 'House',
+    propertySubtype: 'Terrace',
+    title: 'Lekki Terrace',
+    description: 'A four-bedroom terrace in a gated estate.',
+    bedrooms: 4,
+    bathrooms: 4,
+    floorArea: 280,
+    condition: 'Newly built',
+    country: 'Nigeria',
+    state: 'Lagos',
+    cityArea: 'Lekki',
+    streetAddress: '12 Admiralty Way',
+    estateName: 'Palm Estate',
+    askingPrice: 25_000_000,
+    negotiable: true,
+    currentAvailability: 'Available now',
+    ownershipDocument: 'deed.pdf',
+    submission: {
+      verifyDetails: { fullName: 'Ada Lovelace', email: 'ada@example.com' },
+      amenities: { amenities: 'Parking, Gated compound' },
+    },
+  };
+}
+
 function createService(overrides: {
   properties?: Record<string, unknown>;
   saved?: Record<string, unknown>;
@@ -155,8 +362,10 @@ function createService(overrides: {
     find: async () => [],
     findOne: async () => null,
     findBy: async () => [],
-    save: async () => [],
+    save: async (row: Partial<Property>) => row,
     create: (row: Partial<Property>) => row,
+    merge: (row: Property, patch: Partial<Property>) =>
+      Object.assign(row, patch),
     ...overrides.properties,
   };
   const saved = {
@@ -168,5 +377,11 @@ function createService(overrides: {
     ...overrides.saved,
   };
 
-  return new PropertiesService(properties as never, saved as never);
+  return new PropertiesService(
+    properties as never,
+    saved as never,
+    {
+      readableUrl: async (value: string) => value,
+    } as never,
+  );
 }

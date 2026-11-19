@@ -13,7 +13,8 @@ import { JwtStrategy } from './jwt.strategy.js';
 import { OtpChallenge } from './otp-challenge.entity.js';
 import { OtpRateLimiterService } from './otp-rate-limiter.service.js';
 import { RevokedAccessToken } from './revoked-access-token.entity.js';
-import { ConsoleEmailSender, EMAIL_SENDER } from './email-sender.js';
+import { EMAIL_SENDER } from './email-sender.js';
+import { createEmailSender } from './ses-email-sender.js';
 import { ConsoleSmsSender, SMS_SENDER } from './sms-sender.js';
 
 @Module({
@@ -45,7 +46,8 @@ import { ConsoleSmsSender, SMS_SENDER } from './sms-sender.js';
     },
     {
       provide: EMAIL_SENDER,
-      useClass: ConsoleEmailSender,
+      inject: [ConfigService],
+      useFactory: createEmailSender,
     },
     {
       provide: APP_GUARD,

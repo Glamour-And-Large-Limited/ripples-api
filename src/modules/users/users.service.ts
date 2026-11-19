@@ -70,6 +70,45 @@ export class UsersService {
     return this.users.findOneBy({ phone });
   }
 
+  async findOrCreateByGoogle(input: {
+    sub: string;
+    email: string;
+    name: string | null;
+  }): Promise<UserResponse> {
+    const email = input.email.trim().toLowerCase();
+    const linked = await this.users.findOneBy({ googleSub: input.sub });
+    if (linked) {
+      return toUserResponse(linked);
+    }
+
+    const existing = await this.users.findOneBy({ email });
+    if (existing) {
+      if (existing.googleSub && existing.googleSub !== input.sub) {
+        throw new ConflictException(
+          'This email is already linked to another Google account',
+        );
+      }
+      existing.googleSub = input.sub;
+      if (needsSystemUsername(existing.name) && input.name?.trim()) {
+        existing.name = input.name.trim();
+      }
+      try {
+        return toUserResponse(await this.users.save(existing));
+      } catch (error) {
+        throw mapWriteError(error);
+      }
+    }
+
+    const name = input.name?.trim() || createGenericUsername(email);
+    return this.saveUser({
+      email,
+      phone: null,
+      name,
+      passwordHash: null,
+      googleSub: input.sub,
+    });
+  }
+
   async findOrCreateByPhone(phone: string): Promise<UserResponse> {
     const existing = await this.users
       .createQueryBuilder('user')
@@ -167,6 +206,7 @@ export class UsersService {
     phone?: string | null;
     name: string;
     passwordHash: string | null;
+    googleSub?: string | null;
   }): Promise<UserResponse> {
     assertHasContact(input);
 
@@ -177,6 +217,7 @@ export class UsersService {
           phone: input.phone ?? null,
           name: input.name,
           passwordHash: input.passwordHash,
+          googleSub: input.googleSub ?? null,
         }),
       );
       return toUserResponse(user);
@@ -267,6 +308,11 @@ function mapWriteError(error: unknown): unknown {
     if (detail.includes('(phone)')) {
       return new ConflictException(
         'A user with this phone number already exists',
+      );
+    }
+    if (detail.includes('(google_sub)')) {
+      return new ConflictException(
+        'This Google account is already linked to a user',
       );
     }
     return new ConflictException('A user with this email already exists');

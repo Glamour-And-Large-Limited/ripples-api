@@ -6,6 +6,7 @@ import { DatabaseModule } from './database/database.module.js';
 import { EngagementsModule } from './modules/engagements/engagements.module.js';
 import { HealthModule } from './health/health.module.js';
 import { IntegrationsModule } from './integrations/integrations.module.js';
+import { MediaModule } from './modules/media/media.module.js';
 import { MessagingModule } from './messaging/messaging.module.js';
 import { NotesModule } from './modules/notes/notes.module.js';
 import { PropertiesModule } from './modules/properties/properties.module.js';
@@ -23,6 +24,7 @@ import { UsersModule } from './modules/users/users.module.js';
     UsersModule,
     AuthModule,
     EngagementsModule,
+    MediaModule,
     RegionsModule,
     AmenitiesModule,
     PropertiesModule,

@@ -98,6 +98,15 @@ data "aws_iam_policy_document" "task" {
   }
 
   statement {
+    sid    = "SendEmail"
+    effect = "Allow"
+    actions = [
+      "ses:SendEmail",
+    ]
+    resources = ["*"]
+  }
+
+  statement {
     sid    = "ReadAppSecret"
     effect = "Allow"
     actions = [
@@ -142,6 +151,7 @@ locals {
     "TYPEORM_SYNC",
     "AWS_REGION",
     "S3_MEDIA_BUCKET",
+    "SES_FROM_EMAIL",
   ]
 
   container_secrets = [

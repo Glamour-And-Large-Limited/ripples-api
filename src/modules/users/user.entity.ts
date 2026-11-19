@@ -31,6 +31,14 @@ export class User {
   @Column({ type: 'text', unique: true, nullable: true, transformer: trim })
   phone: string | null;
 
+  @Column({
+    name: 'google_sub',
+    type: 'text',
+    unique: true,
+    nullable: true,
+  })
+  googleSub: string | null;
+
   @Column({ type: 'text', transformer: trim })
   name: string;
 

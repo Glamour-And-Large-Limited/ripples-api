@@ -1,4 +1,7 @@
-import { UnauthorizedException } from '@nestjs/common';
+import {
+  ServiceUnavailableException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import type { ConfigService } from '@nestjs/config';
 import type { JwtService } from '@nestjs/jwt';
 import { hash } from 'bcrypt';
@@ -56,6 +59,10 @@ describe('AuthService', () => {
       verifyAsync: vi.fn(),
     };
     const config = {
+      get: vi.fn((key: string) => {
+        if (key === 'GOOGLE_CLIENT_ID') return 'google-client';
+        return '';
+      }),
       getOrThrow: vi.fn((key: string) => {
         if (key === 'OTP_TTL_SECONDS') return otpTtlSeconds;
         if (key === 'OTP_DEBUG') return otpDebug;
@@ -118,6 +125,67 @@ describe('AuthService', () => {
     };
     expect(saved.passwordHash).not.toBe('correct-horse');
     expect(saved.passwordHash.startsWith('$2')).toBe(true);
+  });
+
+  it('loginWithGoogle creates a session from a verified Google identity', async () => {
+    const findOrCreateByGoogle = vi.fn().mockResolvedValue(user);
+    const { auth } = createService({ users: { findOrCreateByGoogle } });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          aud: 'google-client',
+          sub: 'google-sub',
+          email: 'ada@example.com',
+          email_verified: 'true',
+          name: 'Ada Lovelace',
+        }),
+      }),
+    );
+
+    const result = await auth.loginWithGoogle('google-id-token');
+
+    expect(result).toEqual({ accessToken: 'signed-token', user });
+    expect(findOrCreateByGoogle).toHaveBeenCalledWith({
+      sub: 'google-sub',
+      email: 'ada@example.com',
+      name: 'Ada Lovelace',
+    });
+    vi.unstubAllGlobals();
+  });
+
+  it('loginWithGoogle rejects an unverified Google identity', async () => {
+    const { auth } = createService();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          aud: 'other-client',
+          sub: 'google-sub',
+          email: 'ada@example.com',
+          email_verified: 'false',
+        }),
+      }),
+    );
+
+    await expect(auth.loginWithGoogle('google-id-token')).rejects.toThrow(
+      UnauthorizedException,
+    );
+    vi.unstubAllGlobals();
+  });
+
+  it('loginWithGoogle reports when Google is not configured', async () => {
+    const { auth } = createService();
+    const config = (
+      auth as unknown as { config: { get: (key: string) => string } }
+    ).config;
+    config.get = () => '';
+
+    await expect(auth.loginWithGoogle('google-id-token')).rejects.toThrow(
+      ServiceUnavailableException,
+    );
   });
 
   it('login rejects a bad password', async () => {
