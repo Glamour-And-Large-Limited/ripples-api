@@ -42,6 +42,18 @@ export class User {
   @Column({ type: 'text', transformer: trim })
   name: string;
 
+  @Column({ type: 'text', nullable: true, transformer: trim })
+  location: string | null;
+
+  @Column({ name: 'notify_inquiries', type: 'boolean', default: false })
+  notifyInquiries: boolean;
+
+  @Column({ name: 'notify_inspections', type: 'boolean', default: false })
+  notifyInspections: boolean;
+
+  @Column({ name: 'notify_saved_properties', type: 'boolean', default: false })
+  notifySavedProperties: boolean;
+
   @Column({
     name: 'password_hash',
     type: 'text',

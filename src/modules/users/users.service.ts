@@ -8,15 +8,24 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { randomBytes } from 'node:crypto';
 import { Repository } from 'typeorm';
 import { isUniqueViolation } from '../../utils/is-unique-violation.js';
+import { normalizePhone } from '../../utils/normalize-phone.js';
 import type { CreateUserDto } from './create-user.dto.js';
 import type { UpdateUserDto } from './update-user.dto.js';
 import { User } from './user.entity.js';
+
+export type NotificationPreferences = {
+  inquiries: boolean;
+  inspections: boolean;
+  saved: boolean;
+};
 
 export type UserResponse = {
   id: string;
   email: string | null;
   phone: string | null;
   name: string;
+  location: string | null;
+  notificationPreferences: NotificationPreferences;
   hasPassword: boolean;
   sessionVersion: number;
   createdAt: string;
@@ -163,6 +172,54 @@ export class UsersService {
     if (input.name !== undefined) {
       user.name = input.name;
     }
+    if (input.location !== undefined) {
+      user.location = input.location.trim() || null;
+    }
+    if (input.notificationPreferences) {
+      const preferences = input.notificationPreferences;
+      if (preferences.inquiries !== undefined) {
+        user.notifyInquiries = preferences.inquiries;
+      }
+      if (preferences.inspections !== undefined) {
+        user.notifyInspections = preferences.inspections;
+      }
+      if (preferences.saved !== undefined) {
+        user.notifySavedProperties = preferences.saved;
+      }
+    }
+    if (input.email !== undefined) {
+      const email = input.email.trim().toLowerCase();
+      const current = user.email?.trim().toLowerCase() ?? '';
+      if (email !== current) {
+        if (current) {
+          throw new BadRequestException(
+            'Email cannot be changed once it has been added',
+          );
+        }
+        user.email = email || null;
+      }
+    }
+    if (input.phone !== undefined) {
+      const phone = input.phone.trim();
+      if (!phone) {
+        if (user.phone) {
+          throw new BadRequestException(
+            'Phone number cannot be changed once it has been added',
+          );
+        }
+      } else {
+        const normalized = normalizePhone(phone);
+        if (!normalized) {
+          throw new BadRequestException('Enter a valid phone number');
+        }
+        if (user.phone && user.phone !== normalized) {
+          throw new BadRequestException(
+            'Phone number cannot be changed once it has been added',
+          );
+        }
+        user.phone = normalized;
+      }
+    }
     assertHasContact(user);
 
     try {
@@ -265,6 +322,12 @@ export function toUserResponse(user: User): UserResponse {
     email: user.email,
     phone: user.phone,
     name: user.name,
+    location: user.location ?? null,
+    notificationPreferences: {
+      inquiries: user.notifyInquiries ?? false,
+      inspections: user.notifyInspections ?? false,
+      saved: user.notifySavedProperties ?? false,
+    },
     hasPassword: Boolean(user.passwordHash),
     sessionVersion: user.sessionVersion ?? 0,
     createdAt: user.createdAt.toISOString(),

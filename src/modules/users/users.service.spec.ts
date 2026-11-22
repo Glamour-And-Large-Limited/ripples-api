@@ -18,6 +18,12 @@ describe('toUserResponse', () => {
       email: 'ada@example.com',
       phone: '+2348012345678',
       name: 'Ada Lovelace',
+      location: null,
+      notificationPreferences: {
+        inquiries: false,
+        inspections: false,
+        saved: false,
+      },
       hasPassword: true,
       sessionVersion: 0,
       createdAt: '2026-01-01T00:00:00.000Z',
