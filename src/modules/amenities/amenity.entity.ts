@@ -30,6 +30,9 @@ export class Amenity {
   @Column({ type: 'text', transformer: trim })
   icon: string;
 
+  @Column({ type: 'text', transformer: trim, default: 'General' })
+  category: string;
+
   @Column({ name: 'sort_order', type: 'int', default: 0 })
   sortOrder: number;
 

@@ -141,7 +141,6 @@ export class PropertiesService implements OnModuleInit {
         ...listingColumns(input),
         slug,
         ownerUserId: userId,
-        furnishing: 'Not specified',
         images: ownedImageKeys(userId, input.images ?? []),
         verification: 'pending',
         partnerVerified: false,
@@ -294,6 +293,9 @@ function listingColumns(input: CreateListingDto): Partial<Property> {
     bathrooms: input.bathrooms ?? null,
     floorArea: input.floorArea,
     condition: input.condition.trim(),
+    furnishing:
+      input.submission.propertyDetails?.furnishingStatus?.trim() ||
+      'Not specified',
     description: input.description.trim(),
     negotiable: input.negotiable,
     availability:

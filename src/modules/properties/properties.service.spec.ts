@@ -195,7 +195,7 @@ describe('PropertiesService listings', () => {
     expect(created.availability).toBe('available');
     expect(created.verification).toBe('pending');
     expect(created.partnerVerified).toBe(false);
-    expect(created.furnishing).toBe('Not specified');
+    expect(created.furnishing).toBe('Furnished');
     expect(created.images).toEqual([]);
     expect(created.postedAgo).toBe('Just now');
     expect(created.titleDocument).toBe('deed.pdf');
@@ -349,6 +349,7 @@ function listingInput(): CreateListingDto {
     submission: {
       verifyDetails: { fullName: 'Ada Lovelace', email: 'ada@example.com' },
       amenities: { amenities: 'Parking, Gated compound' },
+      propertyDetails: { furnishingStatus: 'Furnished' },
     },
   };
 }

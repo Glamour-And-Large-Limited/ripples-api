@@ -1,0 +1,125 @@
+export const listingCatalog = {
+  listingKinds: [
+    {
+      id: 'individual',
+      title: 'Individual property',
+      description: 'List a standalone property for sale or rent',
+      icon: 'individual-property.png',
+    },
+    {
+      id: 'unit',
+      title: 'Unit in a development',
+      description: 'List a property within an existing development',
+      icon: 'unit-development.png',
+    },
+    {
+      id: 'development',
+      title: 'Development / Project',
+      description: 'Create a development containing multiple units',
+      icon: 'development-project.png',
+    },
+  ],
+  purposes: [
+    {
+      id: 'sale',
+      title: 'For sale',
+      description: 'Sell your properties',
+      icon: 'for-sale.png',
+    },
+    {
+      id: 'rent',
+      title: 'For rent',
+      description: 'Rent out your property',
+      icon: 'for-rent.png',
+    },
+  ],
+  propertyTypes: [
+    {
+      value: 'House',
+      label: 'House',
+      subtypes: [
+        'Detached house',
+        'Semi-detached house',
+        'Terrace',
+        'Terrace duplex',
+        'Duplex',
+        'Bungalow',
+      ],
+    },
+    {
+      value: 'Apartment',
+      label: 'Apartment',
+      subtypes: ['Flat', 'Penthouse', 'Studio', 'Maisonette'],
+    },
+    {
+      value: 'Land',
+      label: 'Land',
+      subtypes: [
+        'Residential land',
+        'Commercial land',
+        'Mixed-use land',
+        'Agricultural land',
+      ],
+    },
+    {
+      value: 'Commercial',
+      label: 'Commercial',
+      subtypes: ['Office', 'Retail space', 'Warehouse', 'Mixed-use commercial'],
+    },
+  ],
+  conditions: [
+    'Newly built',
+    'Renovated / Refurbished',
+    'Existing / Used',
+    'Under construction',
+  ],
+  residentialFurnishing: ['Furnished', 'Semi-furnished', 'Unfurnished'],
+  commercialFitting: ['Fitted', 'Part-fitted', 'Shell'],
+  ownershipRelationships: [
+    { id: 'owner', label: 'Property owner' },
+    { id: 'agent', label: 'Authorized agent' },
+    { id: 'developer', label: 'Property developer' },
+    { id: 'manager', label: 'Property manager' },
+  ],
+  paymentFrequencies: ['Yearly', 'Monthly'],
+  serviceChargeFrequencies: ['Yearly', 'Monthly', 'One-time', 'Included in rent'],
+  otherFeeFrequencies: ['Yearly', 'Monthly', 'One-time'],
+  cautionFeeRefundable: ['Yes', 'No', 'Not applicable'],
+  paymentStructures: ['Full payment', 'Installments', 'Mortgage'],
+  possessionTerms: [
+    'Immediate possession',
+    'After full payment',
+    'On an agreed date',
+  ],
+  occupancyStatuses: ['Vacant', 'Owner occupied', 'Tenant occupied'],
+  installmentPayments: ['Not available', 'Available', 'Subject to agreement'],
+  currentAvailability: [
+    'Available now',
+    'Available from a specific date',
+    'Not currently available',
+  ],
+  minimumLeasePeriods: ['6 months', '1 year', '2 years', 'Flexible'],
+  renewalTerms: [
+    'Subject to agreement',
+    'Automatic renewal',
+    'New agreement required',
+  ],
+  noticePeriods: ['1 month', '2 months', '3 months', '6 months'],
+  availableMoveIn: ['Immediately', 'After payment', 'On an agreed date'],
+  inspectionChoices: [
+    { value: 'yes', label: 'Yes, accept inspection requests' },
+    { value: 'no', label: 'Not at the moment' },
+  ],
+  inspectionTimes: [
+    'Morning (8:00 AM – 12:00 PM)',
+    'Afternoon (12:00 PM – 4:00 PM)',
+    'Evening (4:00 PM – 7:00 PM)',
+  ],
+  propertyRules: [
+    'Pets allowed',
+    'Smoking allowed',
+    'Parking restrictions',
+    'Visitor restrictions',
+    'Estate access restrictions',
+  ],
+} as const;

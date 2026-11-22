@@ -18,6 +18,7 @@ export type AmenityResponse = {
   name: string;
   slug: string;
   icon: string;
+  category: string;
   sortOrder: number;
   isActive: boolean;
   createdAt: string;
@@ -35,22 +36,29 @@ export class AmenitiesService implements OnModuleInit {
 
   async onModuleInit() {
     const count = await this.amenities.count();
-    if (count > 0) {
+    if (count === 0) {
+      await this.amenities.save(
+        AMENITY_SEEDS.map((seed) =>
+          this.amenities.create({
+            name: seed.name,
+            slug: seed.slug,
+            icon: seed.icon,
+            category: seed.category,
+            sortOrder: seed.sortOrder,
+            isActive: true,
+          }),
+        ),
+      );
+      this.logger.log(`Seeded ${AMENITY_SEEDS.length} amenities`);
       return;
     }
 
-    await this.amenities.save(
-      AMENITY_SEEDS.map((seed) =>
-        this.amenities.create({
-          name: seed.name,
-          slug: seed.slug,
-          icon: seed.icon,
-          sortOrder: seed.sortOrder,
-          isActive: true,
-        }),
-      ),
-    );
-    this.logger.log(`Seeded ${AMENITY_SEEDS.length} amenities`);
+    for (const seed of AMENITY_SEEDS) {
+      await this.amenities.update(
+        { slug: seed.slug },
+        { category: seed.category },
+      );
+    }
   }
 
   async create(input: CreateAmenityDto): Promise<AmenityResponse> {
@@ -60,6 +68,7 @@ export class AmenitiesService implements OnModuleInit {
           name: input.name,
           slug: input.slug,
           icon: input.icon,
+          category: input.category?.trim() || 'General',
           sortOrder: input.sortOrder ?? (await this.nextSortOrder()),
           isActive: input.isActive ?? true,
         }),
@@ -92,6 +101,9 @@ export class AmenitiesService implements OnModuleInit {
     }
     if (input.icon !== undefined) {
       amenity.icon = input.icon;
+    }
+    if (input.category !== undefined) {
+      amenity.category = input.category;
     }
     if (input.sortOrder !== undefined) {
       amenity.sortOrder = input.sortOrder;
@@ -137,6 +149,7 @@ export function toAmenityResponse(amenity: Amenity): AmenityResponse {
     name: amenity.name,
     slug: amenity.slug,
     icon: amenity.icon,
+    category: amenity.category,
     sortOrder: amenity.sortOrder,
     isActive: amenity.isActive,
     createdAt: amenity.createdAt.toISOString(),
