@@ -116,6 +116,17 @@ data "aws_iam_policy_document" "gha_deploy" {
   }
 
   statement {
+    sid    = "ReadLoadBalancer"
+    effect = "Allow"
+    actions = [
+      "elasticloadbalancing:DescribeLoadBalancers",
+      "elasticloadbalancing:DescribeTargetGroups",
+      "elasticloadbalancing:DescribeListeners",
+    ]
+    resources = ["*"]
+  }
+
+  statement {
     sid    = "PassEcsRoles"
     effect = "Allow"
     actions = [

@@ -8,6 +8,7 @@ on:
 permissions:
   id-token: write
   contents: read
+  deployments: write
 
 concurrency:
   group: deploy-preprod
@@ -99,9 +100,12 @@ jobs:
             --task-definition "$NEW_ARN" \
             --force-new-deployment
 
-          aws ecs wait services-stable \
-            --cluster "$ECS_CLUSTER" \
-            --services "$ECS_SERVICE"
+      - name: Wait until the service is stable
+        env:
+          DEPLOY_ENVIRONMENT: preprod
+          IMAGE_URI: ${{ steps.build.outputs.image_uri }}
+          HEALTH_PATH: /api/health
+        run: bash .github/scripts/report-service-stability.sh
 
       - name: Publish promote artifact for prod pipeline
         continue-on-error: true
