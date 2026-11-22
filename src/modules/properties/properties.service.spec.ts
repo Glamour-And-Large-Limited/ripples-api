@@ -299,6 +299,64 @@ describe('PropertiesService listings', () => {
     expect(updated.imageKeys).toEqual(existing.images);
   });
 
+  it('returns the caller listings with the date they were created', async () => {
+    const owned = property({
+      ownerUserId: 'user-1',
+      slug: 'lekki-terrace',
+      createdAt: new Date('2026-10-12T00:00:00.000Z'),
+    });
+    let query: unknown;
+    const service = createService({
+      properties: {
+        find: async (options: unknown) => {
+          query = options;
+          return [owned];
+        },
+      },
+    });
+
+    const rows = await service.listMine('user-1');
+
+    expect(query).toEqual({
+      where: { ownerUserId: 'user-1' },
+      order: { createdAt: 'DESC' },
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.slug).toBe('lekki-terrace');
+    expect(rows[0]?.createdAt).toBe('2026-10-12T00:00:00.000Z');
+    expect(rows[0]).not.toHaveProperty('submission');
+  });
+
+  it('deletes a listing the caller owns', async () => {
+    const removeProperty = vi.fn(async () => ({ affected: 1 }));
+    const removeSaved = vi.fn(async () => ({ affected: 0 }));
+    const service = createService({
+      properties: {
+        findOne: async () =>
+          property({ id: 'owned-1', ownerUserId: 'user-1', slug: 'mine' }),
+        delete: removeProperty,
+      },
+      saved: { delete: removeSaved },
+    });
+
+    await service.deleteListing('user-1', 'mine');
+
+    expect(removeSaved).toHaveBeenCalledWith({ propertyId: 'owned-1' });
+    expect(removeProperty).toHaveBeenCalledWith({ id: 'owned-1' });
+  });
+
+  it('rejects a delete from someone who does not own the listing', async () => {
+    const service = createService({
+      properties: {
+        findOne: async () => property({ ownerUserId: 'owner-1' }),
+      },
+    });
+
+    await expect(
+      service.deleteListing('other-user', 'property-1'),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
   it('rejects an update from someone who does not own the listing', async () => {
     const service = createService({
       properties: {

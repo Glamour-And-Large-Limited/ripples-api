@@ -44,6 +44,7 @@ export type PropertyResponse = {
   partnerVerified: boolean;
   availability: Property['availability'];
   postedAgo: string;
+  createdAt?: string;
   confirmedAgo?: string;
   titleDocument?: string;
   documentVerification?: Property['documentVerification'];
@@ -87,6 +88,29 @@ export class PropertiesService implements OnModuleInit {
     const row = await this.properties.findOne({ where: { slug } });
     if (!row) throw new NotFoundException('Property not found');
     return this.present(row);
+  }
+
+  async listMine(userId: string): Promise<PropertyResponse[]> {
+    const rows = await this.properties.find({
+      where: { ownerUserId: userId },
+      order: { createdAt: 'DESC' },
+    });
+    return Promise.all(
+      rows.map(async (row) => ({
+        ...(await this.present(row)),
+        createdAt: row.createdAt.toISOString(),
+      })),
+    );
+  }
+
+  async deleteListing(userId: string, slug: string): Promise<void> {
+    const row = await this.properties.findOne({ where: { slug } });
+    if (!row) throw new NotFoundException('Property not found');
+    if (!row.ownerUserId || row.ownerUserId !== userId) {
+      throw new ForbiddenException('You cannot delete this listing');
+    }
+    await this.savedProperties.delete({ propertyId: row.id });
+    await this.properties.delete({ id: row.id });
   }
 
   async listSaved(userId: string): Promise<PropertyResponse[]> {

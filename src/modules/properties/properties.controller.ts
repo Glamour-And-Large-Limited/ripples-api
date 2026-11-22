@@ -59,6 +59,20 @@ export class PropertiesController {
   }
 
   @ApiBearerAuth('access-token')
+  @Get('me/listings')
+  async listMine(@CurrentUser() user: UserResponse) {
+    const data = await this.properties.listMine(user.id);
+    return { message: 'Listings fetched successfully', data };
+  }
+
+  @ApiBearerAuth('access-token')
+  @Delete('properties/:slug')
+  async remove(@CurrentUser() user: UserResponse, @Param('slug') slug: string) {
+    await this.properties.deleteListing(user.id, slug);
+    return { message: 'Listing deleted successfully', data: { slug } };
+  }
+
+  @ApiBearerAuth('access-token')
   @Get('me/saved-properties')
   async listSaved(@CurrentUser() user: UserResponse) {
     const data = await this.properties.listSaved(user.id);
