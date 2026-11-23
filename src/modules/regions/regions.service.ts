@@ -50,6 +50,47 @@ export class RegionsService {
     private readonly cities: Repository<City>,
   ) {}
 
+  async namesFor(location?: string): Promise<string[]> {
+    const term = location?.trim();
+    if (!term) return [];
+    const country = await this.countries.findOne({
+      where: { name: ILike(term) },
+    });
+    if (!country) return [term];
+    const states = await this.states.find({
+      where: { countryId: country.id },
+    });
+    return [
+      ...new Set([country.name, ...states.map((state) => state.name)]),
+    ];
+  }
+
+  async locateCountry(text?: string): Promise<CountryResponse | null> {
+    const trimmed = text?.trim();
+    if (!trimmed) return null;
+    const countries = await this.countries.find();
+    const haystack = trimmed.toLowerCase();
+    const named = countries
+      .filter((country) => haystack.includes(country.name.toLowerCase()))
+      .sort((left, right) => right.name.length - left.name.length)[0];
+    if (named) return toCountryResponse(named);
+
+    const tokens = trimmed
+      .split(/[,|/]/)
+      .map((part) => part.trim())
+      .filter((part) => part.length > 2)
+      .reverse();
+    for (const token of tokens) {
+      const state = await this.states.findOne({
+        where: { name: ILike(token) },
+      });
+      if (!state) continue;
+      const country = countries.find((row) => row.id === state.countryId);
+      if (country) return toCountryResponse(country);
+    }
+    return null;
+  }
+
   async listCountries(query?: string): Promise<CountryResponse[]> {
     const rows = await this.countries.find({
       where: query?.trim()

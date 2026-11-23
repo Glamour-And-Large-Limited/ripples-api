@@ -170,6 +170,25 @@ describe('PropertiesService catalog', () => {
       params: { verification: 'verified' },
     });
   });
+
+  it('matches a country against that country and its states', async () => {
+    const builder = catalogBuilder([]);
+    const service = createService({
+      properties: {
+        createQueryBuilder: () => builder,
+      },
+      places: {
+        namesFor: async () => ['Nigeria', 'Lagos'],
+      },
+    });
+
+    await service.findAll({ location: 'Nigeria' });
+
+    expect(builder.clauses).toContainEqual({
+      sql: "(property.location ILIKE :location0 ESCAPE '\\' OR property.area ILIKE :location0 ESCAPE '\\') OR (property.location ILIKE :location1 ESCAPE '\\' OR property.area ILIKE :location1 ESCAPE '\\')",
+      params: { location0: '%Nigeria%', location1: '%Lagos%' },
+    });
+  });
 });
 
 describe('PropertiesService partner profile', () => {
@@ -549,6 +568,7 @@ function createService(overrides: {
   properties?: Record<string, unknown>;
   saved?: Record<string, unknown>;
   users?: Record<string, unknown>;
+  places?: { namesFor: (location?: string) => Promise<string[]> };
 }) {
   const properties = {
     count: async () => 1,
@@ -583,5 +603,11 @@ function createService(overrides: {
     {
       readableUrl: async (value: string) => value,
     } as never,
+    (overrides.places ?? {
+      namesFor: async (location?: string) => {
+        const term = location?.trim();
+        return term ? [term] : [];
+      },
+    }) as never,
   );
 }

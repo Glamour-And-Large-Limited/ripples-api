@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { MediaModule } from '../media/media.module.js';
+import { RegionsModule } from '../regions/regions.module.js';
 import { User } from '../users/user.entity.js';
 import { PropertiesController } from './properties.controller.js';
 import { PropertiesService } from './properties.service.js';
@@ -11,6 +12,7 @@ import { SavedProperty } from './saved-property.entity.js';
   imports: [
     TypeOrmModule.forFeature([Property, SavedProperty, User]),
     MediaModule,
+    RegionsModule,
   ],
   controllers: [PropertiesController],
   providers: [PropertiesService],

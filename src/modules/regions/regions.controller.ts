@@ -13,6 +13,12 @@ export class RegionsController {
     return { message: 'Countries fetched successfully', data: rows };
   }
 
+  @Get('countries/locate')
+  async locateCountry(@Query('q') query?: string) {
+    const row = await this.regions.locateCountry(query);
+    return { message: 'Country located', data: row };
+  }
+
   @Get('countries/:countryId')
   async getCountry(@Param('countryId', ParseUUIDPipe) countryId: string) {
     const row = await this.regions.getCountry(countryId);

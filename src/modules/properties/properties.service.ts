@@ -12,6 +12,7 @@ import { In, Repository } from 'typeorm';
 import { User } from '../users/user.entity.js';
 import { isUniqueViolation } from '../../utils/is-unique-violation.js';
 import { MediaService } from '../media/media.service.js';
+import { RegionsService } from '../regions/regions.service.js';
 import { ownedImageKeys } from '../media/media-key.js';
 import { CreateListingDto } from './create-listing.dto.js';
 import { PropertyCatalogQueryDto } from './property-catalog.query.js';
@@ -76,6 +77,7 @@ export class PropertiesService implements OnModuleInit {
     @InjectRepository(User)
     private readonly users: Repository<User>,
     private readonly media: MediaService,
+    private readonly regions: RegionsService,
   ) {}
 
   async onModuleInit() {
@@ -93,7 +95,8 @@ export class PropertiesService implements OnModuleInit {
   async findAll(
     query: PropertyCatalogQueryDto = {},
   ): Promise<PropertyResponse[]> {
-    const rows = await this.catalogQuery(query).getMany();
+    const places = await this.regions.namesFor(query.location);
+    const rows = await this.catalogQuery(query, places).getMany();
     const names = await this.posterNames(rows);
     return Promise.all(
       rows.map((row) =>
@@ -254,18 +257,20 @@ export class PropertiesService implements OnModuleInit {
     return this.present(saved);
   }
 
-  private catalogQuery(query: PropertyCatalogQueryDto) {
+  private catalogQuery(query: PropertyCatalogQueryDto, places: string[]) {
     const builder = this.properties
       .createQueryBuilder('property')
       .where('property.ownerUserId IS NOT NULL')
       .orderBy('property.createdAt', 'DESC');
 
-    const location = query.location?.trim();
-    if (location) {
-      builder.andWhere(
-        "(property.location ILIKE :location ESCAPE '\\' OR property.area ILIKE :location ESCAPE '\\')",
-        { location: `%${location.replace(/[\\%_]/g, '\\$&')}%` },
-      );
+    if (places.length > 0) {
+      const params: Record<string, string> = {};
+      const parts = places.map((place, index) => {
+        const key = places.length === 1 ? 'location' : `location${index}`;
+        params[key] = `%${place.replace(/[\\%_]/g, '\\$&')}%`;
+        return `(property.location ILIKE :${key} ESCAPE '\\' OR property.area ILIKE :${key} ESCAPE '\\')`;
+      });
+      builder.andWhere(parts.join(' OR '), params);
     }
     if (query.kind) {
       builder.andWhere('property.kind = :kind', { kind: query.kind });
