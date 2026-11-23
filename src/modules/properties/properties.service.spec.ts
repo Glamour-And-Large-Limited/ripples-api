@@ -83,32 +83,47 @@ describe('toPropertyResponse', () => {
   it('omits the wizard submission from the public response', () => {
     const response = toPropertyResponse(
       property({
-        submission: { verifyDetails: { email: 'ada@example.com' } },
+        submission: {
+          verifyDetails: { email: 'ada@example.com' },
+          amenities: { amenities: 'Backup power, Water supply' },
+        },
       }),
     );
 
     expect(response).not.toHaveProperty('submission');
     expect(response).not.toHaveProperty('ownerUserId');
+    expect(response.amenities).toEqual(['Backup power', 'Water supply']);
   });
 });
 
 describe('PropertiesService catalog', () => {
-  it('returns the public catalog in sort order', async () => {
-    const rows = [property(), property({ slug: 'property-2', sortOrder: 2 })];
+  it('returns submitted listings newest first with the poster name', async () => {
+    const owned = property({
+      ownerUserId: 'user-1',
+      slug: 'lekki-terrace',
+      createdAt: new Date('2026-11-01T00:00:00.000Z'),
+    });
+    let query: unknown;
     const service = createService({
       properties: {
-        find: async () => rows,
+        find: async (options: unknown) => {
+          query = options;
+          return [owned];
+        },
+      },
+      users: {
+        find: async () => [{ id: 'user-1', name: 'Ada Lovelace' }],
       },
     });
 
     const catalog = await service.findAll();
 
-    expect(catalog).toHaveLength(2);
-    expect(catalog.map((item) => item.slug)).toEqual([
-      'property-1',
-      'property-2',
-    ]);
-    expect(catalog[0]?.priceLabel).toBe('₦4,200,000');
+    expect(query).toMatchObject({ order: { createdAt: 'DESC' } });
+    expect(catalog).toHaveLength(1);
+    expect(catalog[0]?.slug).toBe('lekki-terrace');
+    expect(catalog[0]?.postedBy).toBe('Ada Lovelace');
+    expect(catalog[0]?.createdAt).toBe('2026-11-01T00:00:00.000Z');
+    expect(catalog[0]).not.toHaveProperty('ownerUserId');
   });
 });
 
@@ -415,6 +430,7 @@ function listingInput(): CreateListingDto {
 function createService(overrides: {
   properties?: Record<string, unknown>;
   saved?: Record<string, unknown>;
+  users?: Record<string, unknown>;
 }) {
   const properties = {
     count: async () => 1,
@@ -436,9 +452,15 @@ function createService(overrides: {
     ...overrides.saved,
   };
 
+  const users = {
+    find: async () => [],
+    ...overrides.users,
+  };
+
   return new PropertiesService(
     properties as never,
     saved as never,
+    users as never,
     {
       readableUrl: async (value: string) => value,
     } as never,

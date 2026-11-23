@@ -8,7 +8,8 @@ import {
   type OnModuleInit,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { In, IsNull, Not, Repository } from 'typeorm';
+import { User } from '../users/user.entity.js';
 import { isUniqueViolation } from '../../utils/is-unique-violation.js';
 import { MediaService } from '../media/media.service.js';
 import { ownedImageKeys } from '../media/media-key.js';
@@ -45,12 +46,14 @@ export type PropertyResponse = {
   availability: Property['availability'];
   postedAgo: string;
   createdAt?: string;
+  postedBy?: string;
   confirmedAgo?: string;
   titleDocument?: string;
   documentVerification?: Property['documentVerification'];
   description: string;
   negotiable: boolean;
   recommendedReason?: string;
+  amenities?: string[];
 };
 
 @Injectable()
@@ -62,6 +65,8 @@ export class PropertiesService implements OnModuleInit {
     private readonly properties: Repository<Property>,
     @InjectRepository(SavedProperty)
     private readonly savedProperties: Repository<SavedProperty>,
+    @InjectRepository(User)
+    private readonly users: Repository<User>,
     private readonly media: MediaService,
   ) {}
 
@@ -79,15 +84,25 @@ export class PropertiesService implements OnModuleInit {
 
   async findAll(): Promise<PropertyResponse[]> {
     const rows = await this.properties.find({
-      order: { sortOrder: 'ASC', slug: 'ASC' },
+      where: { ownerUserId: Not(IsNull()) },
+      order: { createdAt: 'DESC' },
     });
-    return Promise.all(rows.map((row) => this.present(row)));
+    const names = await this.posterNames(rows);
+    return Promise.all(
+      rows.map((row) =>
+        this.present(row, row.ownerUserId ? names.get(row.ownerUserId) : null),
+      ),
+    );
   }
 
   async findBySlug(slug: string): Promise<PropertyResponse> {
     const row = await this.properties.findOne({ where: { slug } });
     if (!row) throw new NotFoundException('Property not found');
-    return this.present(row);
+    const names = await this.posterNames([row]);
+    return this.present(
+      row,
+      row.ownerUserId ? names.get(row.ownerUserId) : null,
+    );
   }
 
   async listMine(userId: string): Promise<PropertyResponse[]> {
@@ -199,7 +214,24 @@ export class PropertiesService implements OnModuleInit {
     return this.present(saved);
   }
 
-  private async present(row: Property): Promise<PropertyResponse> {
+  private async posterNames(rows: Property[]): Promise<Map<string, string>> {
+    const ids = [
+      ...new Set(
+        rows.flatMap((row) => (row.ownerUserId ? [row.ownerUserId] : [])),
+      ),
+    ];
+    if (ids.length === 0) return new Map();
+    const users = await this.users.find({
+      where: { id: In(ids) },
+      select: { id: true, name: true },
+    });
+    return new Map(users.map((user) => [user.id, user.name]));
+  }
+
+  private async present(
+    row: Property,
+    postedBy?: string | null,
+  ): Promise<PropertyResponse> {
     const response = toPropertyResponse(row);
     const imageKeys = row.images.filter((image) =>
       image.startsWith('media/listings/'),
@@ -209,6 +241,8 @@ export class PropertiesService implements OnModuleInit {
       images: await Promise.all(
         row.images.map((image) => this.media.readableUrl(image)),
       ),
+      createdAt: row.createdAt.toISOString(),
+      ...(postedBy ? { postedBy } : {}),
       ...(imageKeys.length > 0 ? { imageKeys } : {}),
     };
   }
@@ -273,7 +307,20 @@ export function toPropertyResponse(property: Property): PropertyResponse {
     description: property.description,
     negotiable: property.negotiable,
     ...optional('recommendedReason', property.recommendedReason),
+    ...optional('amenities', savedAmenityNames(property.submission)),
   };
+}
+
+function savedAmenityNames(
+  submission: Property['submission'],
+): string[] | undefined {
+  const raw = submission?.amenities?.amenities;
+  if (!raw?.trim()) return undefined;
+  const names = raw
+    .split(',')
+    .map((name) => name.trim())
+    .filter(Boolean);
+  return names.length > 0 ? names : undefined;
 }
 
 const propertyKinds = {
