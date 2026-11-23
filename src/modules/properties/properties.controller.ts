@@ -9,12 +9,14 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 import { ApiBearerAuth } from '@nestjs/swagger';
 import { CurrentUser } from '../auth/current-user.decorator.js';
 import type { UserResponse } from '../users/users.service.js';
 import { Public } from '../../utils/decorators/public.decorator.js';
 import { CreateListingDto } from './create-listing.dto.js';
+import { PropertyCatalogQueryDto } from './property-catalog.query.js';
 import { PropertiesService } from './properties.service.js';
 import { SavePropertyDto } from './save-property.dto.js';
 
@@ -24,9 +26,18 @@ export class PropertiesController {
 
   @Public()
   @Get('properties')
-  async findAll() {
-    const data = await this.properties.findAll();
+  async findAll(@Query() query: PropertyCatalogQueryDto) {
+    const data = await this.properties.findAll(query);
     return { message: 'Properties fetched successfully', data };
+  }
+
+  @Public()
+  @Get('partners/:partnerId')
+  async partnerProfile(
+    @Param('partnerId', ParseUUIDPipe) partnerId: string,
+  ) {
+    const data = await this.properties.partnerProfile(partnerId);
+    return { message: 'Partner profile fetched successfully', data };
   }
 
   @Public()

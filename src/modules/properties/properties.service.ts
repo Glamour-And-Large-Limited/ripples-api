@@ -8,12 +8,13 @@ import {
   type OnModuleInit,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, IsNull, Not, Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { User } from '../users/user.entity.js';
 import { isUniqueViolation } from '../../utils/is-unique-violation.js';
 import { MediaService } from '../media/media.service.js';
 import { ownedImageKeys } from '../media/media-key.js';
 import { CreateListingDto } from './create-listing.dto.js';
+import { PropertyCatalogQueryDto } from './property-catalog.query.js';
 import { PROPERTY_SEEDS, type PropertySeed } from './properties.seed.js';
 import { Property, type PropertyKind } from './property.entity.js';
 import { SavedProperty } from './saved-property.entity.js';
@@ -47,6 +48,13 @@ export type PropertyResponse = {
   postedAgo: string;
   createdAt?: string;
   postedBy?: string;
+  updatedAt?: string;
+  partner?: {
+    id: string;
+    name: string;
+    verified: boolean;
+    listingCount: number;
+  };
   confirmedAgo?: string;
   titleDocument?: string;
   documentVerification?: Property['documentVerification'];
@@ -82,17 +90,49 @@ export class PropertiesService implements OnModuleInit {
     this.logger.log(`Seeded ${PROPERTY_SEEDS.length} properties`);
   }
 
-  async findAll(): Promise<PropertyResponse[]> {
-    const rows = await this.properties.find({
-      where: { ownerUserId: Not(IsNull()) },
-      order: { createdAt: 'DESC' },
-    });
+  async findAll(
+    query: PropertyCatalogQueryDto = {},
+  ): Promise<PropertyResponse[]> {
+    const rows = await this.catalogQuery(query).getMany();
     const names = await this.posterNames(rows);
     return Promise.all(
       rows.map((row) =>
         this.present(row, row.ownerUserId ? names.get(row.ownerUserId) : null),
       ),
     );
+  }
+
+  async partnerProfile(partnerId: string): Promise<{
+    id: string;
+    name: string;
+    location: string | null;
+    verified: boolean;
+    listingCount: number;
+    listings: PropertyResponse[];
+  }> {
+    const user = await this.users.findOne({
+      where: { id: partnerId },
+      select: { id: true, name: true, location: true },
+    });
+    if (!user) throw new NotFoundException('Partner not found');
+
+    const rows = await this.properties.find({
+      where: { ownerUserId: partnerId },
+      order: { createdAt: 'DESC' },
+    });
+    if (rows.length === 0) throw new NotFoundException('Partner not found');
+
+    const listings = await Promise.all(
+      rows.map((row) => this.present(row, user.name, rows.length)),
+    );
+    return {
+      id: user.id,
+      name: user.name,
+      location: user.location,
+      verified: rows.some((row) => row.partnerVerified),
+      listingCount: rows.length,
+      listings,
+    };
   }
 
   async findBySlug(slug: string): Promise<PropertyResponse> {
@@ -214,6 +254,56 @@ export class PropertiesService implements OnModuleInit {
     return this.present(saved);
   }
 
+  private catalogQuery(query: PropertyCatalogQueryDto) {
+    const builder = this.properties
+      .createQueryBuilder('property')
+      .where('property.ownerUserId IS NOT NULL')
+      .orderBy('property.createdAt', 'DESC');
+
+    const location = query.location?.trim();
+    if (location) {
+      builder.andWhere(
+        "(property.location ILIKE :location ESCAPE '\\' OR property.area ILIKE :location ESCAPE '\\')",
+        { location: `%${location.replace(/[\\%_]/g, '\\$&')}%` },
+      );
+    }
+    if (query.kind) {
+      builder.andWhere('property.kind = :kind', { kind: query.kind });
+    }
+    if (query.purpose) {
+      builder.andWhere('property.purpose = :purpose', {
+        purpose: query.purpose,
+      });
+    }
+    if (query.minBedrooms != null) {
+      builder.andWhere('property.bedrooms >= :minBedrooms', {
+        minBedrooms: query.minBedrooms,
+      });
+    }
+    if (query.minBathrooms != null) {
+      builder.andWhere('property.bathrooms >= :minBathrooms', {
+        minBathrooms: query.minBathrooms,
+      });
+    }
+    if (query.minPrice != null) {
+      builder.andWhere('property.price >= :minPrice', {
+        minPrice: query.minPrice,
+      });
+    }
+    if (query.maxPrice != null) {
+      builder.andWhere('property.price <= :maxPrice', {
+        maxPrice: query.maxPrice,
+      });
+    }
+    if (query.verified) {
+      builder.andWhere('property.verification = :verification', {
+        verification: 'verified',
+      });
+    }
+
+    return builder;
+  }
+
   private async posterNames(rows: Property[]): Promise<Map<string, string>> {
     const ids = [
       ...new Set(
@@ -231,18 +321,37 @@ export class PropertiesService implements OnModuleInit {
   private async present(
     row: Property,
     postedBy?: string | null,
+    listingCount?: number,
   ): Promise<PropertyResponse> {
     const response = toPropertyResponse(row);
     const imageKeys = row.images.filter((image) =>
       image.startsWith('media/listings/'),
     );
+    const count =
+      listingCount ??
+      (row.ownerUserId
+        ? await this.properties.count({
+            where: { ownerUserId: row.ownerUserId },
+          })
+        : 0);
     return {
       ...response,
       images: await Promise.all(
         row.images.map((image) => this.media.readableUrl(image)),
       ),
       createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
       ...(postedBy ? { postedBy } : {}),
+      ...(row.ownerUserId
+        ? {
+            partner: {
+              id: row.ownerUserId,
+              name: postedBy?.trim() || 'Ripples partner',
+              verified: row.partnerVerified,
+              listingCount: count,
+            },
+          }
+        : {}),
       ...(imageKeys.length > 0 ? { imageKeys } : {}),
     };
   }

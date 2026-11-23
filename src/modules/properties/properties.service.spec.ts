@@ -103,13 +103,10 @@ describe('PropertiesService catalog', () => {
       slug: 'lekki-terrace',
       createdAt: new Date('2026-11-01T00:00:00.000Z'),
     });
-    let query: unknown;
+    const builder = catalogBuilder([owned]);
     const service = createService({
       properties: {
-        find: async (options: unknown) => {
-          query = options;
-          return [owned];
-        },
+        createQueryBuilder: () => builder,
       },
       users: {
         find: async () => [{ id: 'user-1', name: 'Ada Lovelace' }],
@@ -118,12 +115,112 @@ describe('PropertiesService catalog', () => {
 
     const catalog = await service.findAll();
 
-    expect(query).toMatchObject({ order: { createdAt: 'DESC' } });
+    expect(builder.clauses).toContain('property.ownerUserId IS NOT NULL');
+    expect(builder.clauses).toContainEqual({
+      column: 'property.createdAt',
+      direction: 'DESC',
+    });
     expect(catalog).toHaveLength(1);
     expect(catalog[0]?.slug).toBe('lekki-terrace');
     expect(catalog[0]?.postedBy).toBe('Ada Lovelace');
     expect(catalog[0]?.createdAt).toBe('2026-11-01T00:00:00.000Z');
+    expect(catalog[0]?.updatedAt).toBe('2026-01-01T00:00:00.000Z');
+    expect(catalog[0]?.partner).toEqual({
+      id: 'user-1',
+      name: 'Ada Lovelace',
+      verified: firstSeed.partnerVerified,
+      listingCount: 1,
+    });
     expect(catalog[0]).not.toHaveProperty('ownerUserId');
+  });
+
+  it('applies location, type, price, and bedroom filters', async () => {
+    const builder = catalogBuilder([]);
+    const service = createService({
+      properties: {
+        createQueryBuilder: () => builder,
+      },
+    });
+
+    await service.findAll({
+      location: 'Lagos',
+      kind: 'house',
+      purpose: 'sale',
+      minBedrooms: 3,
+      minBathrooms: 2,
+      minPrice: 25_000_000,
+      maxPrice: 60_000_000,
+      verified: true,
+    });
+
+    expect(builder.clauses).toContainEqual({
+      sql: "(property.location ILIKE :location ESCAPE '\\' OR property.area ILIKE :location ESCAPE '\\')",
+      params: { location: '%Lagos%' },
+    });
+    expect(builder.clauses).toContainEqual({
+      sql: 'property.kind = :kind',
+      params: { kind: 'house' },
+    });
+    expect(builder.clauses).toContainEqual({
+      sql: 'property.bedrooms >= :minBedrooms',
+      params: { minBedrooms: 3 },
+    });
+    expect(builder.clauses).toContainEqual({
+      sql: 'property.verification = :verification',
+      params: { verification: 'verified' },
+    });
+  });
+});
+
+describe('PropertiesService partner profile', () => {
+  it('returns the poster and the listings they submitted', async () => {
+    const owned = property({
+      ownerUserId: 'user-1',
+      slug: 'lekki-terrace',
+      partnerVerified: false,
+    });
+    const service = createService({
+      properties: {
+        find: async () => [owned],
+      },
+      users: {
+        findOne: async () => ({
+          id: 'user-1',
+          name: 'Ada Lovelace',
+          location: 'Lagos',
+        }),
+      },
+    });
+
+    const profile = await service.partnerProfile('user-1');
+
+    expect(profile).toMatchObject({
+      id: 'user-1',
+      name: 'Ada Lovelace',
+      location: 'Lagos',
+      verified: false,
+      listingCount: 1,
+    });
+    expect(profile.listings[0]?.slug).toBe('lekki-terrace');
+    expect(profile).not.toHaveProperty('email');
+    expect(profile).not.toHaveProperty('phone');
+  });
+
+  it('rejects a partner with no submitted listings', async () => {
+    const service = createService({
+      properties: { find: async () => [] },
+      users: {
+        findOne: async () => ({
+          id: 'user-1',
+          name: 'Ada Lovelace',
+          location: null,
+        }),
+      },
+    });
+
+    await expect(service.partnerProfile('user-1')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
   });
 });
 
@@ -427,6 +524,27 @@ function listingInput(): CreateListingDto {
   };
 }
 
+function catalogBuilder(rows: Property[]) {
+  const clauses: unknown[] = [];
+  const builder = {
+    clauses,
+    where(sql: string) {
+      clauses.push(sql);
+      return builder;
+    },
+    andWhere(sql: string, params?: unknown) {
+      clauses.push({ sql, params });
+      return builder;
+    },
+    orderBy(column: string, direction: string) {
+      clauses.push({ column, direction });
+      return builder;
+    },
+    getMany: async () => rows,
+  };
+  return builder;
+}
+
 function createService(overrides: {
   properties?: Record<string, unknown>;
   saved?: Record<string, unknown>;
@@ -454,6 +572,7 @@ function createService(overrides: {
 
   const users = {
     find: async () => [],
+    findOne: async () => null,
     ...overrides.users,
   };
 
